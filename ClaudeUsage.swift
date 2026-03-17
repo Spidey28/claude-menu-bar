@@ -314,7 +314,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 .font: font,
                 .foregroundColor: NSColor.white.withAlphaComponent(0.5)
             ]
-            button.attributedTitle = NSAttributedString(string: "CC --", attributes: attrs)
+            button.attributedTitle = NSAttributedString(string: "CTX --", attributes: attrs)
         } else {
             let primary = lastSessions[0]
             let pct = Int(primary.contextPercentage)
@@ -324,7 +324,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 .font: font,
                 .foregroundColor: color
             ]
-            button.attributedTitle = NSAttributedString(string: "CC \(pct)%", attributes: attrs)
+            button.attributedTitle = NSAttributedString(string: "CTX \(pct)%", attributes: attrs)
         }
 
         buildMenu()

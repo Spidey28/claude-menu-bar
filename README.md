@@ -8,7 +8,7 @@ A native macOS menu bar widget that shows your Claude Code context window usage 
 
 ## Features
 
-- **Real-time context usage** — displays `CC 7%` in your menu bar, updating every 5 seconds
+- **Real-time context usage** — displays `CTX 7%` in your menu bar, updating every 5 seconds
 - **Color-coded percentage** — green, blue, yellow, orange, red as context fills up
 - **Multi-session support** — tracks all active Claude Code sessions simultaneously
 - **Detailed dropdown** — click to see per-session breakdown with progress bars, token counts, model, duration, and PID
@@ -25,7 +25,7 @@ A native macOS menu bar widget that shows your Claude Code context window usage 
 
 | Menu Bar | Dropdown |
 |----------|----------|
-| `CC 7%` (green) | Project name, progress bar, token count, model info |
+| `CTX 7%` (green) | Project name, progress bar, token count, model info |
 
 ### Color Scale
 
