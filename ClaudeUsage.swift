@@ -30,6 +30,51 @@ struct ConversationLine: Codable {
     let timestamp: String?
 }
 
+struct ModelTokens {
+    var inputTokens: Int = 0
+    var outputTokens: Int = 0
+    var cacheReadTokens: Int = 0
+    var cacheCreationTokens: Int = 0
+
+    var totalTokens: Int {
+        inputTokens + outputTokens + cacheReadTokens + cacheCreationTokens
+    }
+}
+
+struct UsagePeriod {
+    var messageCount: Int = 0
+    var sessionCount: Int = 0
+    var tokensByModel: [String: ModelTokens] = [:]
+    var totalInputTokens: Int = 0
+    var totalOutputTokens: Int = 0
+    var totalCacheReadTokens: Int = 0
+    var totalCacheCreationTokens: Int = 0
+
+    var totalTokens: Int {
+        totalInputTokens + totalOutputTokens + totalCacheReadTokens + totalCacheCreationTokens
+    }
+
+    mutating func add(model: String, input: Int, output: Int, cacheRead: Int, cacheCreation: Int) {
+        messageCount += 1
+        totalInputTokens += input
+        totalOutputTokens += output
+        totalCacheReadTokens += cacheRead
+        totalCacheCreationTokens += cacheCreation
+
+        var mt = tokensByModel[model] ?? ModelTokens()
+        mt.inputTokens += input
+        mt.outputTokens += output
+        mt.cacheReadTokens += cacheRead
+        mt.cacheCreationTokens += cacheCreation
+        tokensByModel[model] = mt
+    }
+}
+
+struct PeriodUsage {
+    var today = UsagePeriod()
+    var thisWeek = UsagePeriod()
+}
+
 struct ActiveSession {
     let pid: Int
     let sessionId: String
@@ -130,6 +175,79 @@ class SessionMonitor {
         return sessions.sorted { $0.startedAt > $1.startedAt }
     }
 
+    func computePeriodUsage() -> PeriodUsage {
+        let fm = FileManager.default
+        var result = PeriodUsage()
+
+        let calendar = Calendar.current
+        let now = Date()
+        guard let weekStart = calendar.dateInterval(of: .weekOfYear, for: now)?.start else {
+            return result
+        }
+        let todayStart = calendar.startOfDay(for: now)
+
+        let isoFormatter = ISO8601DateFormatter()
+        isoFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        let isoFormatterNoFrac = ISO8601DateFormatter()
+        isoFormatterNoFrac.formatOptions = [.withInternetDateTime]
+
+        var weekSessionIds = Set<String>()
+        var todaySessionIds = Set<String>()
+
+        guard let projectDirs = try? fm.contentsOfDirectory(atPath: projectsDir) else {
+            return result
+        }
+
+        for projectDir in projectDirs {
+            let projectPath = "\(projectsDir)/\(projectDir)"
+            guard let files = try? fm.contentsOfDirectory(atPath: projectPath) else { continue }
+
+            for file in files where file.hasSuffix(".jsonl") {
+                let filePath = "\(projectPath)/\(file)"
+
+                // Skip files not modified this week
+                guard let attrs = try? fm.attributesOfItem(atPath: filePath),
+                      let modDate = attrs[.modificationDate] as? Date,
+                      modDate >= weekStart else { continue }
+
+                guard let data = fm.contents(atPath: filePath),
+                      let content = String(data: data, encoding: .utf8) else { continue }
+
+                let sessionId = String(file.dropLast(6))
+
+                for line in content.components(separatedBy: "\n") where !line.isEmpty {
+                    guard let lineData = line.data(using: .utf8),
+                          let conv = try? JSONDecoder().decode(ConversationLine.self, from: lineData),
+                          let message = conv.message,
+                          message.role == "assistant",
+                          let msgUsage = message.usage,
+                          let timestamp = conv.timestamp else { continue }
+
+                    guard let date = isoFormatter.date(from: timestamp) ?? isoFormatterNoFrac.date(from: timestamp) else { continue }
+                    guard date >= weekStart else { continue }
+
+                    let model = message.model ?? "unknown"
+                    let input = msgUsage.input_tokens ?? 0
+                    let output = msgUsage.output_tokens ?? 0
+                    let cacheRead = msgUsage.cache_read_input_tokens ?? 0
+                    let cacheCreation = msgUsage.cache_creation_input_tokens ?? 0
+
+                    result.thisWeek.add(model: model, input: input, output: output, cacheRead: cacheRead, cacheCreation: cacheCreation)
+                    weekSessionIds.insert(sessionId)
+
+                    if date >= todayStart {
+                        result.today.add(model: model, input: input, output: output, cacheRead: cacheRead, cacheCreation: cacheCreation)
+                        todaySessionIds.insert(sessionId)
+                    }
+                }
+            }
+        }
+
+        result.thisWeek.sessionCount = weekSessionIds.count
+        result.today.sessionCount = todaySessionIds.count
+        return result
+    }
+
     private func readLastUsage(from path: String) -> (model: String, inputTokens: Int, cacheRead: Int, cacheCreation: Int, outputTokens: Int)? {
         guard let data = FileManager.default.contents(atPath: path),
               let content = String(data: data, encoding: .utf8) else { return nil }
@@ -164,6 +282,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var timer: Timer?
     private let monitor = SessionMonitor()
     private var lastSessions: [ActiveSession] = []
+    private var periodUsage = PeriodUsage()
+    private var lastUsageUpdate: Date = .distantPast
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -178,6 +298,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func updateDisplay() {
         lastSessions = monitor.findActiveSessions()
+
+        // Refresh usage stats every 60 seconds (expensive scan)
+        if Date().timeIntervalSince(lastUsageUpdate) > 60 {
+            periodUsage = monitor.computePeriodUsage()
+            lastUsageUpdate = Date()
+        }
 
         guard let button = statusItem.button else { return }
 
@@ -224,6 +350,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
                 menu.addItem(viewItem)
             }
         }
+
+        // Usage stats sections
+        menu.addItem(NSMenuItem.separator())
+        let todayItem = NSMenuItem()
+        todayItem.view = createUsagePeriodView(periodUsage.today, title: "Today")
+        menu.addItem(todayItem)
+
+        menu.addItem(NSMenuItem.separator())
+        let weekItem = NSMenuItem()
+        weekItem.view = createUsagePeriodView(periodUsage.thisWeek, title: "This Week")
+        menu.addItem(weekItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -309,6 +446,100 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         container.addSubview(detailLabel)
 
         return container
+    }
+
+    private func createUsagePeriodView(_ usage: UsagePeriod, title: String) -> NSView {
+        let width: CGFloat = 280
+        let padding: CGFloat = 16
+        let contentWidth = width - padding * 2
+
+        // Compute layout height based on content
+        let headerHeight: CGFloat = 18
+        let lineHeight: CGFloat = 16
+        let smallLineHeight: CGFloat = 14
+        let sectionGap: CGFloat = 8
+        let modelCount = usage.tokensByModel.count
+
+        // Header + summary lines + gap + per-model lines + bottom padding
+        let summaryLines: CGFloat = 4 // messages, input, output, cache
+        let totalHeight = 10 + headerHeight + sectionGap
+            + summaryLines * lineHeight + sectionGap
+            + (modelCount > 0 ? smallLineHeight + CGFloat(modelCount) * smallLineHeight : 0)
+            + 6
+
+        let container = NSView(frame: NSRect(x: 0, y: 0, width: width, height: totalHeight))
+        var y = totalHeight - 10 - headerHeight
+
+        // Header
+        let header = NSTextField(labelWithString: title)
+        header.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        header.textColor = NSColor.labelColor
+        header.frame = NSRect(x: padding, y: y, width: contentWidth, height: headerHeight)
+        container.addSubview(header)
+        y -= sectionGap
+
+        // Summary stats
+        let lines: [(String, String)] = [
+            ("Messages", "\(usage.messageCount) across \(usage.sessionCount) sessions"),
+            ("Input tokens", formatTokenCount(usage.totalInputTokens)),
+            ("Output tokens", formatTokenCount(usage.totalOutputTokens)),
+            ("Cache read / write", "\(formatTokenCount(usage.totalCacheReadTokens)) / \(formatTokenCount(usage.totalCacheCreationTokens))"),
+        ]
+
+        for (label, value) in lines {
+            y -= lineHeight
+            let labelField = NSTextField(labelWithString: label)
+            labelField.font = NSFont.systemFont(ofSize: 11, weight: .medium)
+            labelField.textColor = NSColor.secondaryLabelColor
+            labelField.frame = NSRect(x: padding, y: y, width: 110, height: lineHeight)
+            container.addSubview(labelField)
+
+            let valueField = NSTextField(labelWithString: value)
+            valueField.font = NSFont.monospacedDigitSystemFont(ofSize: 11, weight: .regular)
+            valueField.textColor = NSColor.labelColor
+            valueField.frame = NSRect(x: padding + 114, y: y, width: contentWidth - 114, height: lineHeight)
+            container.addSubview(valueField)
+        }
+
+        // Per-model breakdown
+        if !usage.tokensByModel.isEmpty {
+            y -= sectionGap
+            y -= smallLineHeight
+            let modelHeader = NSTextField(labelWithString: "By Model")
+            modelHeader.font = NSFont.systemFont(ofSize: 11, weight: .semibold)
+            modelHeader.textColor = NSColor.secondaryLabelColor
+            modelHeader.frame = NSRect(x: padding, y: y, width: contentWidth, height: smallLineHeight)
+            container.addSubview(modelHeader)
+
+            let sortedModels = usage.tokensByModel.sorted { $0.value.totalTokens > $1.value.totalTokens }
+            for (model, tokens) in sortedModels {
+                y -= smallLineHeight
+                let modelName = formatModelName(model)
+                let modelLabel = NSTextField(labelWithString: modelName)
+                modelLabel.font = NSFont.systemFont(ofSize: 10, weight: .regular)
+                modelLabel.textColor = NSColor.secondaryLabelColor
+                modelLabel.frame = NSRect(x: padding, y: y, width: 110, height: smallLineHeight)
+                container.addSubview(modelLabel)
+
+                let tokenStr = "\(formatTokenCount(tokens.inputTokens)) in / \(formatTokenCount(tokens.outputTokens)) out"
+                let tokenLabel = NSTextField(labelWithString: tokenStr)
+                tokenLabel.font = NSFont.monospacedDigitSystemFont(ofSize: 10, weight: .regular)
+                tokenLabel.textColor = NSColor.labelColor
+                tokenLabel.frame = NSRect(x: padding + 114, y: y, width: contentWidth - 114, height: smallLineHeight)
+                container.addSubview(tokenLabel)
+            }
+        }
+
+        return container
+    }
+
+    private func formatTokenCount(_ count: Int) -> String {
+        if count >= 1_000_000 {
+            return String(format: "%.1fM", Double(count) / 1_000_000.0)
+        } else if count >= 1_000 {
+            return String(format: "%.1fK", Double(count) / 1_000.0)
+        }
+        return "\(count)"
     }
 
     private func colorForPercentage(_ pct: Double) -> NSColor {
