@@ -12,6 +12,7 @@ A native macOS menu bar widget that shows your Claude Code context window usage 
 - **Color-coded percentage** — green, blue, yellow, orange, red as context fills up
 - **Multi-session support** — tracks all active Claude Code sessions simultaneously
 - **Detailed dropdown** — click to see per-session breakdown with progress bars, token counts, model, duration, and PID
+- **Launch at Login** — one-click toggle to start automatically when you log in
 - **Zero dependencies** — single Swift file, compiles with just `swiftc`
 - **Native & lightweight** — pure AppKit, no Electron, no background services, no dock icon
 
@@ -31,33 +32,31 @@ A native macOS menu bar widget that shows your Claude Code context window usage 
 | 80–90% | Orange |
 | > 90% | Red |
 
+## Download
+
+Download the latest DMG from the [Releases](https://github.com/nichochar/claude-menu-bar/releases) page. Open the DMG and drag **Claude Monitor** to your Applications folder.
+
 ## Requirements
 
 - macOS 14.0+
-- Xcode Command Line Tools (`xcode-select --install`)
 - [Claude Code](https://claude.ai/code) installed and in use
 
-## Install
+## Build from Source
+
+Requires Xcode Command Line Tools (`xcode-select --install`).
 
 ```bash
-git clone https://github.com/your-username/claude-menu-bar.git
+git clone https://github.com/nichochar/claude-menu-bar.git
 cd claude-menu-bar
 bash build.sh
 open "Claude Monitor.app"
 ```
 
-## Build
+To also create a distributable DMG:
 
 ```bash
-bash build.sh
+bash build.sh --dmg
 ```
-
-This compiles `ClaudeUsage.swift` into `Claude Monitor.app` — a self-contained macOS app bundle.
-
-## Auto-Start on Login
-
-1. Open **System Settings** > **General** > **Login Items**
-2. Click **+** and select `Claude Monitor.app`
 
 ## How It Works
 
@@ -82,7 +81,8 @@ No data is sent anywhere — everything is read locally from Claude Code's own f
 claude-menu-bar/
   ClaudeUsage.swift    # Single-file Swift app (all logic)
   Info.plist           # macOS app bundle metadata
-  build.sh             # Build script
+  build.sh             # Build script (icon gen, code sign, optional DMG)
+  icon_gen.swift       # Generates app icon PNG at build time
   LICENSE              # MIT License
   README.md            # This file
 ```

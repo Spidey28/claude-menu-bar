@@ -1,5 +1,6 @@
 import Cocoa
 import Foundation
+import ServiceManagement
 
 // MARK: - Data Models
 
@@ -169,7 +170,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         updateDisplay()
         timer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
-            self?.updateDisplay()
+            Task { @MainActor in
+                self?.updateDisplay()
+            }
         }
     }
 
@@ -224,9 +227,27 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
+        // Launch at Login toggle
+        let launchItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLaunchAtLogin), keyEquivalent: "")
+        launchItem.target = self
+        if #available(macOS 13.0, *) {
+            launchItem.state = (SMAppService.mainApp.status == .enabled) ? .on : .off
+        }
+        menu.addItem(launchItem)
+
+        menu.addItem(NSMenuItem.separator())
+
         let refreshItem = NSMenuItem(title: "Refresh", action: #selector(refreshNow), keyEquivalent: "r")
         refreshItem.target = self
         menu.addItem(refreshItem)
+
+        let checkUpdatesItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
+        checkUpdatesItem.target = self
+        menu.addItem(checkUpdatesItem)
+
+        let aboutItem = NSMenuItem(title: "About Claude Monitor", action: #selector(showAbout), keyEquivalent: "")
+        aboutItem.target = self
+        menu.addItem(aboutItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -311,6 +332,39 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             .split(separator: " ")
             .map { $0.prefix(1).uppercased() + $0.dropFirst() }
             .joined(separator: " ")
+    }
+
+    @objc private func toggleLaunchAtLogin() {
+        if #available(macOS 13.0, *) {
+            do {
+                if SMAppService.mainApp.status == .enabled {
+                    try SMAppService.mainApp.unregister()
+                } else {
+                    try SMAppService.mainApp.register()
+                }
+            } catch {
+                // Silently ignore — user can manage via System Settings
+            }
+            buildMenu()
+        }
+    }
+
+    @objc private func checkForUpdates() {
+        if let url = URL(string: "https://github.com/nichochar/claude-menu-bar/releases") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    @objc private func showAbout() {
+        let version = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "?"
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "?"
+
+        let alert = NSAlert()
+        alert.messageText = "Claude Monitor"
+        alert.informativeText = "Version \(version) (\(build))\n\nA lightweight macOS menu bar app that shows your Claude Code context window usage in real-time.\n\nMIT License"
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "OK")
+        alert.runModal()
     }
 
     @objc private func refreshNow() {

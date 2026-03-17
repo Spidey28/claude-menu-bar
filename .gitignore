@@ -1,5 +1,9 @@
 # Build output
 Claude Monitor.app/
+Claude Monitor.dmg
+icon_gen_tool
+build_icon.png
+AppIcon.iconset/
 
 # macOS
 .DS_Store
