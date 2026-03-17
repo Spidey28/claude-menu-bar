@@ -581,7 +581,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc private func checkForUpdates() {
-        if let url = URL(string: "https://github.com/nichochar/claude-menu-bar/releases") {
+        if let url = URL(string: "https://github.com/Spidey28/claude-menu-bar/releases") {
             NSWorkspace.shared.open(url)
         }
     }

@@ -12,7 +12,12 @@ A native macOS menu bar widget that shows your Claude Code context window usage 
 - **Color-coded percentage** — green, blue, yellow, orange, red as context fills up
 - **Multi-session support** — tracks all active Claude Code sessions simultaneously
 - **Detailed dropdown** — click to see per-session breakdown with progress bars, token counts, model, duration, and PID
+- **Today & This Week usage stats** — aggregated token usage (input, output, cache read/write) and message counts, broken down by model — similar to `/usage` in Claude Code
 - **Launch at Login** — one-click toggle to start automatically when you log in
+- **Check for Updates** — links directly to GitHub releases
+- **About dialog** — shows current version info
+- **App icon** — generated at build time, visible in Activity Monitor and Force Quit
+- **Code signed & DMG ready** — ad-hoc signed app bundle with optional DMG for easy distribution
 - **Zero dependencies** — single Swift file, compiles with just `swiftc`
 - **Native & lightweight** — pure AppKit, no Electron, no background services, no dock icon
 
@@ -32,9 +37,19 @@ A native macOS menu bar widget that shows your Claude Code context window usage 
 | 80–90% | Orange |
 | > 90% | Red |
 
+### Menu Items
+
+- **Active sessions** — per-session context usage with progress bar, token count, model, duration, PID
+- **Today** — messages, sessions, input/output tokens, cache read/write, per-model breakdown
+- **This Week** — same stats aggregated across the full week
+- **Launch at Login** — toggle with checkmark indicator
+- **Refresh** — manually refresh all stats
+- **Check for Updates...** — opens GitHub releases page
+- **About Claude Monitor** — version and license info
+
 ## Download
 
-Download the latest DMG from the [Releases](https://github.com/nichochar/claude-menu-bar/releases) page. Open the DMG and drag **Claude Monitor** to your Applications folder.
+Download the latest DMG from the [Releases](https://github.com/Spidey28/claude-menu-bar/releases) page. Open the DMG and drag **Claude Monitor** to your Applications folder.
 
 ## Requirements
 
@@ -46,7 +61,7 @@ Download the latest DMG from the [Releases](https://github.com/nichochar/claude-
 Requires Xcode Command Line Tools (`xcode-select --install`).
 
 ```bash
-git clone https://github.com/nichochar/claude-menu-bar.git
+git clone https://github.com/Spidey28/claude-menu-bar.git
 cd claude-menu-bar
 bash build.sh
 open "Claude Monitor.app"
@@ -64,7 +79,8 @@ bash build.sh --dmg
 2. Locates the JSONL conversation file for each active session in `~/.claude/projects/`
 3. Parses the last assistant message's `usage` field to get token counts
 4. Calculates context usage as a percentage of the 1M token context window
-5. Renders in the menu bar with color coding and builds a detailed dropdown menu
+5. Scans all JSONL files (modified this week) to aggregate Today and This Week usage stats by model
+6. Renders in the menu bar with color coding and builds a detailed dropdown menu
 
 ### Data Sources
 
@@ -80,7 +96,7 @@ No data is sent anywhere — everything is read locally from Claude Code's own f
 ```
 claude-menu-bar/
   ClaudeUsage.swift    # Single-file Swift app (all logic)
-  Info.plist           # macOS app bundle metadata
+  Info.plist           # macOS app bundle metadata (v1.1)
   build.sh             # Build script (icon gen, code sign, optional DMG)
   icon_gen.swift       # Generates app icon PNG at build time
   LICENSE              # MIT License
