@@ -1,0 +1,14 @@
+# Build output
+Claude Monitor.app/
+
+# macOS
+.DS_Store
+*.swp
+*~
+
+# Xcode (if opened)
+*.xcodeproj
+*.xcworkspace
+xcuserdata/
+DerivedData/
+build/
